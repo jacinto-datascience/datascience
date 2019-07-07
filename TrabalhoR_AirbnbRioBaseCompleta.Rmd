@@ -1,0 +1,231 @@
+---
+title: "Análise sobre as informações públicas do Airbnb."
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#aqui coisas que não aparecem no relatorio
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+
+```
+
+## Caso de estudo: Rio de Janeiro
+Base de dados: Anúncios de hospedagem do site Airbnb existentes na cidade do Rio de Janeiro, em 21/05/2019. <br>
+Fonte: http://insideairbnb.com/rio-de-janeiro/# <br>
+http://data.insideairbnb.com/brazil/rj/rio-de-janeiro/2019-05-21/data/listings.csv.gz <br>
+A base foi limitada a anúncios de bairros que possuam ao menos 50 acomodações anunciadas para evitar distorções de casos isolados.
+
+```{r include=FALSE}
+setwd("/home/rafaellj/DataScience/Base de dados")
+
+airbnb = read_csv("anunciosriodejaneiro20190521.csv")
+
+bairrosAnunciosMin = airbnb %>%
+  group_by(neighbourhood) %>%
+  summarise(totalAnuncios = n_distinct(id)) %>%
+  filter(totalAnuncios>=50, !is.na(neighbourhood)) %>%
+  arrange(-totalAnuncios)
+
+bairrosAnunciosMin  
+
+airbnb.rio = airbnb %>%
+  select(id,host_id,neighbourhood,room_type,price,number_of_reviews,reviews_per_month,listing_url, host_url, host_response_rate, bathrooms, bedrooms, review_scores_rating) %>%
+  filter(neighbourhood %in% bairrosAnunciosMin$neighbourhood)
+
+airbnb.rio = airbnb.rio %>%
+  mutate(price = as.numeric(gsub('\\$|,', '', price))) %>%
+  mutate(host_response_rate = as.numeric(gsub('%', '', airbnb.rio$host_response_rate)))%>%
+  rename(bairro = neighbourhood)
+
+
+```
+
+##1. Quais os bairros com mais apartamentos anunciados?
+```{r }
+
+bairrosMaisApt = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(totalApartamentos = n_distinct(id))%>%
+  arrange(-totalApartamentos)
+
+bairrosMaisApt
+
+bairrosMaisAptGeral = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(totalAnuncios = n_distinct(id),
+            precoMedio=mean(price, na.rm=TRUE),
+            reviewsMedia=mean(number_of_reviews),
+            reviewsMediaMes=mean(reviews_per_month, na.rm=TRUE)) %>%
+  arrange(-totalAnuncios)
+
+bairrosMaisAptGeral
+
+```
+
+
+##2. Quais os bairros mais caros?
+```{r }
+
+bairrosPreco = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(precoMedio = mean(price)) %>%
+  arrange(-precoMedio)
+
+bairrosPreco
+
+bairrosPrecoGeral = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(precoMedio=mean(price, na.rm=TRUE),
+            totalAnuncios = n_distinct(id),
+            reviewsMedia=mean(number_of_reviews),
+            reviewsMediaMes=mean(reviews_per_month, na.rm=TRUE)) %>%
+  arrange(-precoMedio)
+
+bairrosPrecoGeral
+
+```
+
+##3. Quais os bairros mais baratos?
+```{r }
+
+bairrosPreco = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(precoMedio = mean(price)) %>%
+  arrange(precoMedio)
+
+bairrosPreco
+
+bairrosPrecoGeral = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(precoMedio=mean(price, na.rm=TRUE),
+            totalAnuncios = n_distinct(id),
+            reviewsMedia=mean(number_of_reviews),
+            reviewsMediaMes=mean(reviews_per_month, na.rm=TRUE)) %>%
+  arrange(precoMedio)
+
+bairrosPrecoGeral
+
+```
+
+
+##4. Quais os bairros com maior taxa de ocupação?
+Segundo o projeto "Inside Airbnb", a base de dados foi populada a partir dos dados públicos capturados do site. Como não existe abertamente no site os dados sobre os aluguéis realizados de cada hospedagem anunciada, a taxa de ocupação dos imóveis pode ser estimada a partir da quantidade de reviews de cada anúncio. De acordo com o projeto estima-se que em 50% dos casos os usuários deixam reviews, assim quanto maior a quantidade de reviews mais podemos considerar que o anúncio foi reservado pelo site.
+
+```{r }
+bairrosMaisReservas = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(mediaReviews = mean(number_of_reviews)) %>%
+  arrange(-mediaReviews)
+
+bairrosMaisReservas
+
+bairrosMaisReservasGeral = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(reviewsMedia=mean(number_of_reviews),
+            totalAnuncios = n_distinct(id),
+            precoMedio=mean(price, na.rm=TRUE),
+            reviewsMediaMes=mean(reviews_per_month, na.rm=TRUE)) %>%
+  arrange(-reviewsMedia)
+
+bairrosMaisReservasGeral
+
+```
+
+##5. Quais os bairros com maior frequência de ocupação mensal?
+Se observarmos apenas a média de reviews, podemos não considerar situações onde ocorreu uma alta ocupação esporádica em determinado bairro, mas que não corresponda uma frequência habitual de ocupação. Assim, cabe também observar a média mensal de ocupação de cada bairro.
+
+```{r }
+bairrosMaisReservasMensal = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(reviewsMediaMes = mean(reviews_per_month, na.rm=TRUE)) %>%
+  arrange(-reviewsMediaMes)
+
+bairrosMaisReservasMensal
+
+bairrosMaisReservasMensalGeral = airbnb.rio %>%
+  group_by(bairro) %>%
+  summarise(reviewsMediaMes=mean(reviews_per_month, na.rm=TRUE),
+            totalAnuncios = n_distinct(id),
+            precoMedio=mean(price, na.rm=TRUE),
+            reviewsMedia=mean(number_of_reviews)) %>%
+  arrange(-reviewsMediaMes)
+
+bairrosMaisReservasMensalGeral
+```
+
+##6. Qual o tipo de acomodação mais anunciado e o mais procurado (de acordo com quantidade de reviews)?
+```{r }
+tipoAptMaisProcurado = airbnb.rio %>%
+  group_by(room_type) %>%
+  summarise(reviewsMediaMes = mean(reviews_per_month, na.rm=TRUE),
+            totalAnuncios = n_distinct(id),
+            precoMedio=mean(price, na.rm=TRUE)) %>%
+  arrange(-reviewsMediaMes)
+
+tipoAptMaisProcurado
+```
+
+##7. Quais os apartamentos com maior número de reviews, onde fica e qual seu valor/dia? 
+```{r }
+aptMaisOcupado = airbnb.rio %>%
+  select(bairro, listing_url, number_of_reviews, price) %>%
+  arrange(-number_of_reviews) %>%
+  rename(nReviews = number_of_reviews)
+aptMaisOcupado
+```
+
+##8. Quais os apartamentos com maior frequência de ocupação mensal, onde ficam e qual seu valor/dia? 
+```{r }
+aptMaisOcupadoMes = airbnb.rio %>%
+  select(bairro, listing_url, reviews_per_month, price) %>%
+  arrange(-reviews_per_month)%>%
+  rename(nReviewsMes = reviews_per_month)
+aptMaisOcupadoMes
+
+```
+
+
+##9. Quantos anuncios tem os 5 maiores anunciantes?
+```{r }
+totalPorAnunciante = airbnb.rio %>%
+  group_by(host_id, host_url) %>%
+  summarise(totalAnuncios = n_distinct(id))%>%
+  arrange(-totalAnuncios)%>%
+  head(n = 5)
+totalPorAnunciante
+```
+
+
+##10. Modelo de Regressao Linear
+- Qual a relação entre as avaliações recebidas e taxa de ocupação mensal da acomodação?
+<br><br>
+Gráfico de Dispersão
+```{r }
+plot(airbnb.rio$review_scores_rating, airbnb.rio$reviews_per_month)
+```
+
+Coeficiente de Correção Linear
+```{r }
+cor(!is.na(airbnb.rio$review_scores_rating), !is.na(airbnb.rio$reviews_per_month))
+```
+
+Teste de Hipótese
+```{r }
+cor.test(airbnb.rio$review_scores_rating, airbnb.rio$reviews_per_month)
+```
+
+## Ajustes do Modelo de Regressao Linear
+```{r }
+model = lm(reviews_per_month~review_scores_rating, data=airbnb.rio)
+model
+summary(model)
+anova(model)
+plot(model)
+ggplot(airbnb.rio, aes(x=review_scores_rating,y=reviews_per_month,color=price))+ geom_point() + geom_line()
+```
